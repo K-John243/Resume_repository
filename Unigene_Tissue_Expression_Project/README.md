@@ -7,7 +7,6 @@ tissues in which the specified gene is expressed in the
 specified host.
 
 
-Getting Started
 Dependencies
 To run get_gene_level_information.py, you need the 
 assignment5 subdirectory containing the config and io_utils
