@@ -15,6 +15,7 @@ modules.
 You also need the Unigene data that the program sorts through.
 You can download the .zip file containing the folder with the data
 using this link: https://drive.google.com/file/d/1j4BslSw9FN5E3B-aj0x01qKDmZK6GLGI/view?usp=drive_link
+After downloading, simply place the entire data folder within the folder named "assignment5_data"
 
 
 
