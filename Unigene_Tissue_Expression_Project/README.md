@@ -13,6 +13,8 @@ To run get_gene_level_information.py, you need the
 assignment5 subdirectory containing the config and io_utils
 modules.
 You also need the Unigene data that the program sorts through.
+You can download the .zip file containing the folder with the data
+using this link: https://drive.google.com/file/d/1j4BslSw9FN5E3B-aj0x01qKDmZK6GLGI/view?usp=drive_link
 
 
 
