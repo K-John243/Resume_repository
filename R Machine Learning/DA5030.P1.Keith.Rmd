@@ -1,0 +1,295 @@
+---
+title: "Practicum 1"
+author: "John Keith"
+date: "October 4 2023"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+## 1 / Predicting Breast Cancer
+
+```{r Exploringdata, echo=FALSE}
+df <- read.csv('Wisonsin_breast_cancer_data.csv')[-1][-32]
+
+```
+
+### 1.1 / Analysis of Data Distribution
+
+```{r Histogram, echo=FALSE}
+m <- mean(df$radius_mean)
+std_rad_mean <- sd(df$radius_mean)
+hist(df$radius_mean, prob = TRUE, breaks = seq(0, 30, 1))
+curve(dnorm(x, mean = m, sd = std_rad_mean), add = T, col = 'blue')
+```
+It seems like the radius_mean data is fairly left skewed, not following a normal distribution. It matters to see if the data is normally distributed because you can only perform certain statistical/machine learning tests if the data is normally distributed.
+
+
+```{r ShapiroWilkTest, echo=FALSE}
+shap_mean_rad <- shapiro.test(df$radius_mean)
+```
+From the Shapiro-Wilk test, we find that the p-value from the test is `r shap_mean_rad[2]`, which is much less than p = 0.05, therefore showing that the data is not normally distributed.
+
+
+### 1.2 / Identification of Outliers
+
+```{r OutlierDetection}
+find_outliers <- function(column){
+  m <- mean(column)
+  std_column <- sd(column)
+  z_score <- abs(m - column[1:length(column)]) / std_column
+  return(which(z_score > 2.5))
+  }
+num_outliers <- 0
+for (i in 2:ncol(df)){
+  outliers <- find_outliers(df[,i])
+  print(paste('Outliers for column', colnames(df[i]), 'are in rows'))
+  print(outliers)
+  num_outliers <- num_outliers + length(outliers)
+  
+}
+```
+The above code outputs all of the outliers per column. As you can see, there are a decent amount of outliers for each column, making it important to deal with/normalize. If I were performing a statistical/machine learning task that assumed a normal distribution (such as linear regression), I would simply standardize the data using the z-score method.
+Otherwise, I would probably use the min-max normalization method in order to get the entire column of data on a scale of 0 to 1, in order to allow the machine learning task to not get thrown off by a difference in scales.
+To find the outliers in each column, I used the z-score formula in combination wtih the which function to see which data points in a column were greater than 2.5. The amount of outliers I found were `r num_outliers`.
+
+
+### 1.3 / Data Preparation
+
+```{r Z-score_standardization}
+
+
+for (i in 2:ncol(df)){
+  df[,i] <- (df[,i] - mean(df[,i])) / sd(df[,i])
+
+}
+```
+
+I normalized each column of data by simply applying the z-score formula to each element in each row. You do this in order to allow any machine learning method to not be thrown off by changes in scales between different measurements/types of data.
+
+
+### 1.4 / Sampling Training and Validation Data
+
+```{r SampleRandom}
+set.seed(202)
+df_M <- df[which(df$diagnosis == 'M'),]
+df_B <- df[which(df$diagnosis == 'B'),]
+sample <- sample.int(n = nrow(df_M), size = floor(.20*nrow(df_M)))
+validation_df <- df_M[sample,]
+training_df <- df_M[-sample,]
+sample_b <- sample.int(n = nrow(df_B), size = floor(.20*nrow(df_B)))
+validation_df <- rbind(validation_df, df_B[sample_b,])
+training_df <- rbind(training_df, df_B[-sample_b,])
+```
+
+### 1.5 / Predictive Modeling
+
+```{r Predictive_Modeling}
+library(class)
+df_training_labels <- training_df[,1]
+df_training <- training_df[,-1]
+df_validation_labels <- validation_df[,1]
+df_validation <- validation_df[,-1]
+
+knn_test_pred <- knn(train = df_training, test = df_validation, cl = df_training_labels, k = 5)
+
+#checking if the knn model works well
+library(gmodels)
+CrossTable(x = df_validation_labels, y = knn_test_pred, prop.chisq = FALSE)
+# Around 99% accuracy, so the model works very well
+
+
+#load original df for non z-score values
+df_orig <- read.csv('Wisonsin_breast_cancer_data.csv')[-1][-32]
+
+new_data <- list(14.5, 17.0, 87.5, 561.3, 0.098, 0.105, 0.085, 0.050, 0.180, 0.065, 0.351, 1.015, 2.457, 26.15, 0.005, 0.022, 0.036, 0.013, 0.030, 0.005, 16.5, 25.3, 114.8, 733.5, 0.155, 0.220, median(df_orig$concavity_worst), median(df_orig$concave.points_worst), 0.360, 0.110)
+
+df_new_data <- df_training[1,]
+for (i in 1:ncol(df_new_data)){
+  df_new_data[1,i] <- new_data[i]
+}
+
+# z-score noramlize the data (except for 27 and 28)
+for (i in 2:ncol(df_new_data)){
+  df_new_data[,i-1] <- (df_new_data[,i-1] - mean(df_orig[,i])) / sd(df_orig[,i])
+}
+
+# knn test for new values
+new_data_knn_pred <- knn(train = df_training, test = df_new_data, cl = df_training_labels, k = 5)
+```
+
+I used the knn method from the class package to predict what the diagnosis (Malignant or Benign) would be for the new cancer data given in the assignment. I firs used the testing data to make the model, then saw how well the model predicted the validation data, and it correctly predicted the diagnosis of the validation set 99% of the time, so it worked very well. Then I applied the model to the new data (z-score standardized), and the model predicted that the diagnosis from the new data would be `r as.character(new_data_knn_pred)`, which would be benign.
+
+
+### 1.6 / Model Accuracy
+
+```{r ModelAccuracy, echo=FALSE}
+k_range <- seq(2,10,1)
+knn_accuracy <- c(97.3, 98.2, 99.2, 99.2, 99.2, 98.2, 98.2, 99.2, 99.2)
+#knn_test_pred <- knn(train = df_training, test = df_validation, cl = df_training_labels, k = 10)
+#CrossTable(x = df_validation_labels, y = knn_test_pred, prop.chisq = FALSE)
+
+plot(k_range, knn_accuracy, col = 'blue')
+```
+The chart shows the accuracy of the model based on the K values chosen between 2 and 10. As you can see, the model itself among all of these K values is fairly accurate(around 97-99% accuracy for k=2-10). However, if I were to apply this model and chose one K value for future knn predictions, I would chose a K of 10 because a good starting point for k is the square root of the training sample, and 10 is the closest of these values to that while being among the most accurate.
+
+
+
+## 2 / Predicting Age of Abalones using Regression kNN
+
+
+### 2.1 / Load csv and save target vector and training data
+```{r LoadCSV}
+df_abalone <- read.csv('https://s3.us-east-2.amazonaws.com/artificium.us/datasets/abalone.csv')
+
+target_data <- as.vector(df_abalone$NumRings)
+train_data <- df_abalone[-8]
+```
+
+### 2.2 / Encoding Categorical Variables
+```{r EncodingCatVariables}
+#the only categorical variable is sex, which is a good case for using one-hot encoding. We will create two new columns (Male and Female) and do TRUE(1) or FALSE(0) for each column depending on Male of Female, or both columns will be FALSE(0) for Infant.
+
+train_data$Male <- 0
+train_data$Female <- 0
+for (i in 1:nrow(train_data)){
+  if (train_data$Sex[i] == 'I'){
+    train_data$Male[i] <- FALSE
+    train_data$Female[i] <- FALSE
+  }
+  if (train_data$Sex[i] == 'M'){
+    train_data$Male[i] <- TRUE
+    train_data$Female[i] <- FALSE
+  }
+  if (train_data$Sex[i] == 'F'){
+    train_data$Male[i] <- FALSE
+    train_data$Female[i] <- TRUE
+  }
+}
+
+#get rid of the Sex column, now that sex is stored in two seperate columns.
+train_data <- train_data[-8]
+
+```
+
+
+### 2.3 / Normalize all colums using min-max normalization
+```{r MinMax_Normalizing}
+#Remember not to normalize the two sex columns; train_data[8:9]
+for (i in 1:(ncol(train_data)-2)){
+  train_data[,i] <- (train_data[,i] - min(train_data[,i])) / (max(train_data[,i]) - min(train_data[,i]))
+}
+```
+
+
+### 2.4 / Build knn.reg function
+```{r Buildknn.reg_function}
+#establish variables/data needed for knn.reg function
+knn_dist_list <- list()
+new_data <- train_data[1,]
+new_data_list <- list(0.44, 0.391,0.254, 0.2132, 0.0878, 0.21,0.5853, 0, 1)
+for (i in 1:ncol(new_data)){
+  new_data[1,i] <- new_data_list[i]
+}
+#make the knn.reg function
+knn.reg <- function(new_data, target_data, train_data, k){
+  # knndist <- sqrt((xnewdata - xtraindata)^2 + (ynewdata - ytraindata)^2 ...)
+  for (i in 1:nrow(train_data)){
+    knn_dist_presqrt <- 0
+    knn_dist_unsqrt <- train_data[i,] - new_data[1,]
+    for (q in 1:length(knn_dist_unsqrt)){
+      knn_dist_presqrt <- knn_dist_presqrt + (knn_dist_unsqrt[,q])^2
+    }
+    knn_dist_final <- sqrt(knn_dist_presqrt)
+    knn_dist_list <- append(as.numeric(knn_dist_list), knn_dist_final)
+    
+  }
+  top_k_neighbors <- order(knn_dist_list, decreasing = TRUE)[1:3]
+  #now find the ring values then multiply the weights and divide by the total of the weights (6)
+  ring_k_neighbors <- ((3 * target_data[top_k_neighbors[1]]) +
+    ((2) * target_data[top_k_neighbors[2]]) + (1* target_data[top_k_neighbors[3]]))/6
+return(ring_k_neighbors)
+  
+}
+
+#call the knn.reg function using the correct variable/data
+knn.reg(new_data = new_data, target_data = target_data, train_data = train_data, k = 3)
+
+```
+
+
+
+### 2.5 / use knn.reg function to predict rings from new data
+```{r knn.reg_newdata}
+#call the knn.reg function using the correct variable/data
+knn.reg(new_data = new_data, target_data = target_data, train_data = train_data, k = 3)
+```
+
+
+## 2.6 / calculate MSE
+```{r MSE}
+predicted_knn_reg <- list()
+# generate random sample from train_data
+sample <- sample.int(n = nrow(train_data), size = floor(.25*nrow(train_data)))
+test_data <- train_data[sample,]
+test_rings <- target_data[sample]
+```
+```{r MSE2, eval=FALSE}
+#not evaluating because it took too long when knitting, so I saved to 
+#a .Rdata file instead before knitting
+for (i in 1:nrow(test_data)){
+  knn_val <- knn.reg(new_data = test_data[i,] , target_data = target_data, train_data = train_data)
+  predicted_knn_reg <- append(as.numeric(predicted_knn_reg), knn_val)
+}
+```
+
+```{r MSE3}
+load(file = 'predicted_knn_reg.Rdata')
+error_total <- 0 
+#MSE calc
+for (i in 1:length(predicted_knn_reg)){
+  error_total <- error_total + (test_rings[i] - predicted_knn_reg[i])^2
+}
+MSE_knn <- sum(error_total)/length(predicted_knn_reg)
+print(MSE_knn)
+```
+
+
+## 3 / Forecasting Future Sales Price
+```{r Forecasting_Future_Sales_Price, echo=FALSE}
+df_property <- read.csv('https://s3.us-east-2.amazonaws.com/artificium.us/datasets/property-sales.csv') 
+for (i in 1:nrow(df_property)){
+  df_property$datesold[i] <- sub("0:00", "", df_property$datesold[i])
+}
+mean_price07 <- mean(df_property$price[which(grepl('/07', df_property$datesold) == TRUE)])
+mean_price08 <- mean(df_property$price[which(grepl('/08', df_property$datesold) == TRUE)])
+mean_price09 <- mean(df_property$price[which(grepl('/09', df_property$datesold) == TRUE)])
+mean_price10 <- mean(df_property$price[which(grepl('/10', df_property$datesold) == TRUE)])
+mean_price11 <- mean(df_property$price[which(grepl('/11', df_property$datesold) == TRUE)])
+mean_price12 <- mean(df_property$price[which(grepl('/12', df_property$datesold) == TRUE)])
+mean_price13 <- mean(df_property$price[which(grepl('/13', df_property$datesold) == TRUE)])
+mean_price14 <- mean(df_property$price[which(grepl('/14', df_property$datesold) == TRUE)])
+mean_price15 <- mean(df_property$price[which(grepl('/15', df_property$datesold) == TRUE)])
+mean_price16 <- mean(df_property$price[which(grepl('/16', df_property$datesold) == TRUE)])
+mean_price17 <- mean(df_property$price[which(grepl('/17', df_property$datesold) == TRUE)])
+mean_price18 <- mean(df_property$price[which(grepl('/18', df_property$datesold) == TRUE)])
+mean_price19 <- mean(df_property$price[which(grepl('/19', df_property$datesold) == TRUE)])
+mean_price_year <- c(mean_price07, mean_price08, mean_price09, mean_price10, mean_price11, mean_price12, mean_price13, mean_price14, mean_price15, mean_price16, mean_price17, mean_price18, mean_price19)
+years <- c(2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019)
+
+df_year_price <- data.frame(row.names = years, price = mean_price_year)
+
+```
+
+We obtained a data set containing `r nrow(df_property)`sales transactions for the years 2007 to 2019. The mean sales price for the entire time frame was `r mean(df_property$price)` (sd = `r sd(df_property$price)`).
+
+Broken down by year, we have the following average sales prices per year:
+
+`r print(df_year_price)`
+
+As the graph below shows, the average sales price per year has been increasing.
+
+`r plot(years, df_year_price$price)`
+
+Using a weighted moving average forecasting model that averages the prior 3 years (with weights of 4, 3, and 1), we predict next year's average sales price to be around `r ((4* df_year_price$price[length(df_year_price$price)]) + (3* df_year_price$price[length(df_year_price$price) -1]) + (df_year_price$price[length(df_year_price$price)-2]))/8`.
+
